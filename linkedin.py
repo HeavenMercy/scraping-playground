@@ -9,8 +9,8 @@ def main():
 
         page.goto('https://www.linkedin.com')
 
-        uname = print('[username]: ')
-        passwd = print('[password]: ')
+        uname = input('[username]: ')
+        passwd = input('[password]: ')
 
         page.fill('input[name="session_key"]', uname)
         page.fill('input[name="session_password"]', passwd)
