@@ -9,7 +9,7 @@ def main():
     articles = []
 
     while len(urls) > 0:
-        req = rq.get(urls.pop())
+        req = rq.get(urls.pop(), proxies={'http': '64.225.97.57:8080', 'https': '64.225.97.57:8080'})
         base_url = '/'.join(req.url.split('/')[0:-1])
 
         print(f'scraping {req.url}...')
