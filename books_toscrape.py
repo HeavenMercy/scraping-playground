@@ -6,50 +6,59 @@ import pandas as pd
 urls = ['http://books.toscrape.com']
 
 def main():
-    articles = []
+    resp = rq.get(urls.pop())
+    base_url = '/'.join(resp.url.split('/')[0:-1])
 
-    while len(urls) > 0:
-        req = rq.get(urls.pop(), proxies={'http': '64.225.97.57:8080', 'https': '64.225.97.57:8080'})
-        base_url = '/'.join(req.url.split('/')[0:-1])
+    print(f"scraping url '{resp.url}'...")
+    bs = BeautifulSoup(resp.text, 'lxml')
 
-        print(f'scraping {req.url}...')
-        bs = BeautifulSoup(req.text, 'lxml')
+    books = []
+    for cat in bs.select('.side_categories ul ul > li a'):
+        books += get_books(cat['href'], base_url)
 
-        for article in bs.find_all('article'):
-            article = parse_article(article, base_url)
-            if article == None: continue
+    return books
 
-            print(f'found {article}...')
-            articles.append(article)
 
-        next = bs.select('li.next a')
-        if next:
-            next = next[0]['href']
-            urls.insert(0, F"{base_url}/{next}")
-        else: print('no next page found!')
+def get_books(cat_url: str, base_url: str):
+    resp = rq.get(f"{base_url}/{cat_url}")
 
-    df = pd.DataFrame(articles)
-    df.to_csv('./output/books.csv')
+    bs = BeautifulSoup(resp.text, 'lxml')
+    category = bs.select_one('.page-header h1').text.strip()
+
+    print(f"inspecting categorie '{category}'...")
+
+    books = []
+    for article in bs.select('.page_inner .row ol li'):
+        book = parse_book(article.select_one('a')['href'], base_url, category=category)
+        if book is not None: books.append( book )
+
+    return books
 
 
 ratings = ['zero', 'one', 'two', 'three', 'four', 'five']
 
-def parse_article(article: Tag, base_url: str):
+def parse_book(book: Tag, base_url: str, category: str):
     try:
-        img = article.select('div.image_container > a > img.thumbnail')[0]
-        rating = article.find('p', {'class': 'star-rating'})
-        title = article.select('h3 a')[0]
-        price = article.find('div', {'class': 'product_price'})
+        resp = rq.get(f"{base_url}/catalogue/{book.replace('../', '')}")
+        bs = BeautifulSoup(resp.text, 'lxml')
 
-        return {
-            'title': title['title'],
-            'cover_url': f"{base_url}/{img['src']}",
-            'price': price.find('p', {'class': 'price_color'}).text,
-            'rating': ratings.index(rating['class'][-1].lower()),
-            'link': f"{base_url}/{title['href']}",
-            'available': (price.find('i', {'class': 'icon-ok'}) != None)
-        }
-    except:
+        cover = bs.select_one('.product_page #product_gallery img')['src']
+        cover = f"{base_url}/{cover.replace('../', '')}"
+
+        title = bs.select_one('.product_page h1').text.strip()
+        description = bs.select_one('.product_page #product_description + p').text.replace('...more', '').strip()
+
+        data = {'Cover': cover, 'Title': title, 'Description': description, 'Category': category}
+        for d in bs.select('.product_page table tr'):
+            data[d.select_one('th').text.strip()] = d.select_one('td').text.strip()
+
+        print(f"data extracted for '{title}'...")
+        return data
+    except Exception as e:
+        print(e)
         return None
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    pd.DataFrame(main()).to_csv('output/books.csv')
+
